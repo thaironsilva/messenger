@@ -2,18 +2,17 @@ package router
 
 import (
 	"database/sql"
-	"log"
 	"net/http"
 
 	"github.com/thaironsilva/messenger/api/resource/user"
 )
 
-func New(l *log.Logger, db *sql.DB) *http.ServeMux {
+func New(db *sql.DB) *http.ServeMux {
 	router := http.NewServeMux()
 
-	userHandler := user.New(l, db)
-	router.HandleFunc("GET /users", userHandler.List)
-	router.HandleFunc("POST /users", userHandler.Create)
+	userStorage := user.NewRepository(db)
+	router.HandleFunc("GET /users", user.GetUsers(userStorage))
+	router.HandleFunc("POST /users", user.CreateUsers(userStorage))
 
 	return router
 }

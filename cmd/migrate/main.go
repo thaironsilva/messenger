@@ -17,10 +17,9 @@ func start_migration(db *sql.DB) {
 	query := `
 	CREATE SCHEMA IF NOT EXISTS private;
 	CREATE TABLE IF NOT EXISTS private.migrations (
-		id uuid DEFAULT gen_random_uuid(),
+		id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
 		file_name VARCHAR UNIQUE NOT NULL,
-		created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-		PRIMARY KEY (id)
+		created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 	);
 	`
 	_, err := db.Exec(query)
@@ -38,7 +37,10 @@ func get_migrations(db *sql.DB) []string {
 
 	for rows.Next() {
 		var migration_row string
-		rows.Scan(&migration_row)
+
+		if err := rows.Scan(&migration_row); err != nil {
+			panic(err)
+		}
 		array = append(array, migration_row)
 	}
 
@@ -55,7 +57,7 @@ func create_new_migration_files(file_name string) {
 	}
 }
 
-func migrate_down(l *log.Logger, db *sql.DB, stored_migrations []string) {
+func migrate_down(db *sql.DB, stored_migrations []string) {
 	files, err := os.ReadDir("migrations/")
 	if err != nil {
 		panic(err)
@@ -66,13 +68,15 @@ func migrate_down(l *log.Logger, db *sql.DB, stored_migrations []string) {
 		if file_name[1] == "down" {
 			for _, migration_name := range stored_migrations {
 				if file_name[0] == migration_name {
-					l.Println("Reverting migration ", file_name[0], "...")
+					log.Println("Reverting migration ", file_name[0], "...")
 					query, _ := os.ReadFile("migrations/" + files[i].Name())
 					if _, err := db.Query(string(query)); err != nil {
-						l.Fatal("Failed to revert migration due to error: ", err)
+						log.Fatal("Failed to revert migration:", err)
 					}
-					db.Exec("DELETE FROM private.migrations WHERE file_name = ($1)", file_name[0])
-					l.Println("Migration ", file_name[0], " reverted.")
+					if _, err := db.Exec("DELETE FROM private.migrations WHERE file_name = ($1)", file_name[0]); err != nil {
+						log.Fatal("Failed to delete migration:", err)
+					}
+					log.Println("Migration ", file_name[0], " reverted.")
 				}
 			}
 		}
@@ -92,7 +96,7 @@ func reset_db(db *sql.DB) {
 	}
 }
 
-func migrate_up(l *log.Logger, db *sql.DB, stored_migrations []string) {
+func migrate_up(db *sql.DB, stored_migrations []string) {
 	files, err := os.ReadDir("migrations/")
 	if err != nil {
 		panic(err)
@@ -104,27 +108,26 @@ func migrate_up(l *log.Logger, db *sql.DB, stored_migrations []string) {
 			for _, migration_name := range stored_migrations {
 				if file_name[0] == migration_name {
 					run_migration = false
-					l.Println("Migration", file_name[0], "already ran.")
+					log.Println("Migration", file_name[0], "already ran.")
 					break
 				}
 			}
 			if run_migration {
-				l.Println("Running migration ", file_name[0], "...")
+				log.Println("Running migration ", file_name[0], "...")
 				query, _ := os.ReadFile("migrations/" + file.Name())
 				if _, err := db.Query(string(query)); err != nil {
-					l.Fatal("Failed to run migration due to error: ", err)
+					log.Fatal("Failed to run migration:", err)
 				}
-				db.Exec("INSERT INTO private.migrations (file_name) VALUES ($1)", file_name[0])
-				l.Println("Migration ", file_name[0], " finished.")
+				if _, err := db.Exec("INSERT INTO private.migrations (file_name) VALUES ($1)", file_name[0]); err != nil {
+					panic(err)
+				}
+				log.Println("Migration ", file_name[0], " finished.")
 			}
 		}
 	}
 }
 
 func main() {
-	l := log.New(os.Stdout, "", log.LstdFlags)
-	l.SetFlags(0)
-
 	db := config.NewDB()
 
 	defer db.Close()
@@ -140,20 +143,20 @@ func main() {
 	case "new":
 		create_new_migration_files(os.Args[2])
 	case "down":
-		l.Println("Running migrations DOWN")
-		migrate_down(l, db, stored_migrations)
-		l.Println("All migrations successfully reverted.")
+		log.Println("Running migrations DOWN")
+		migrate_down(db, stored_migrations)
+		log.Println("All migrations successfully reverted.")
 	case "reset":
-		l.Println("RESETING migrations")
+		log.Println("RESETING migrations")
 		reset_db(db)
-		l.Println("Starting migrations")
+		log.Println("Starting migrations")
 		start_migration(db)
-		l.Println("Rerunning migrations")
-		migrate_up(l, db, []string{})
-		l.Println("All migrations are done.")
+		log.Println("Rerunning migrations")
+		migrate_up(db, []string{})
+		log.Println("All migrations are done.")
 	default:
-		l.Println("Running migrations UP")
-		migrate_up(l, db, stored_migrations)
-		l.Println("All migrations are done.")
+		log.Println("Running migrations UP")
+		migrate_up(db, stored_migrations)
+		log.Println("All migrations are done.")
 	}
 }
