@@ -1,16 +1,16 @@
 version: '3.9'
 
 services:
-  # messenger:
-  #   container_name: messenger
-  #   image: messenger:0.1.0
-  #   build: .
-  #   environment:
-  #     DATABASE_URL: "host=go_db user=postgres password=postgres dbname=postgres sslmode=disable"
-  #   ports:
-  #     - "8000:8000"
-  #   depends_on:
-  #     - go_db
+  messenger:
+    container_name: messenger
+    image: messenger:0.1.0
+    build: .
+    environment:
+      DATABASE_URL: "host=host.docker.internal user=postgres password=postgres dbname=postgres sslmode=disable"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - go_db
   go_db:
     container_name: go_db
     image: postgres:16

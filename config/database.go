@@ -2,21 +2,13 @@ package config
 
 import (
 	"database/sql"
-	"fmt"
+	"os"
 
 	_ "github.com/lib/pq"
 )
 
-const (
-	host     = "localhost"
-	port     = 5432
-	user     = "postgres"
-	password = "postgres"
-	dbname   = "postgres"
-)
-
 func NewDB() *sql.DB {
-	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
+	psqlInfo := databaseUrl()
 	db, err := sql.Open("postgres", psqlInfo)
 
 	if err != nil {
@@ -29,4 +21,11 @@ func NewDB() *sql.DB {
 	}
 
 	return db
+}
+
+func databaseUrl() string {
+	if url := os.Getenv("DATABASE_URL"); url != "" {
+		return url
+	}
+	return "host=localhost user=postgres password=postgres dbname=postgres sslmode=disable"
 }
