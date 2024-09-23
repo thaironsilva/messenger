@@ -18,7 +18,7 @@ func (r *Repository) GetById(id string) (User, error) {
 	row := r.db.QueryRow("SELECT * FROM users WHERE id = $1", id)
 
 	var user User
-	if err := row.Scan(&user.Id, &user.Username, &user.Email, &user.Password, &user.CreatedAt, &user.UpdatedAt); err != nil {
+	if err := row.Scan(&user.Id, &user.Username, &user.Email); err != nil {
 		return user, err
 	}
 
@@ -35,7 +35,7 @@ func (r *Repository) GetAll() ([]User, error) {
 
 	for rows.Next() {
 		var user User
-		if err := rows.Scan(&user.Id, &user.Username, &user.Email, &user.Password, &user.CreatedAt, &user.UpdatedAt); err != nil {
+		if err := rows.Scan(&user.Id, &user.Username, &user.Email); err != nil {
 			return users, err
 		}
 		users = append(users, user)
@@ -45,7 +45,7 @@ func (r *Repository) GetAll() ([]User, error) {
 
 func (r *Repository) Create(newUser User) error {
 	query := "INSERT INTO users (username, email, password, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)"
-	_, err := r.db.Exec(query, newUser.Username, newUser.Email, newUser.Password, newUser.CreatedAt, newUser.UpdatedAt)
+	_, err := r.db.Exec(query, newUser.Username, newUser.Email)
 	if err != nil {
 		return err
 	}
@@ -54,7 +54,7 @@ func (r *Repository) Create(newUser User) error {
 
 func (r *Repository) Update(user User) error {
 	query := "UPDATE users SET username = $1, email=$2, password=$3, updated_at=$4 WHERE id=$5"
-	_, err := r.db.Exec(query, user.Username, user.Email, user.Password, user.UpdatedAt, user.Id)
+	_, err := r.db.Exec(query, user.Username, user.Email, user.Id)
 	if err != nil {
 		return err
 	}

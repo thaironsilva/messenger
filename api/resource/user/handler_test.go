@@ -7,7 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	cognito "github.com/aws/aws-sdk-go/service/cognitoidentityprovider"
 	"github.com/thaironsilva/messenger/api/resource/user"
+	"github.com/thaironsilva/messenger/cognitoClient"
 )
 
 type MockStorage struct {
@@ -36,8 +38,35 @@ func (m *MockStorage) Delete(id string) error {
 	return m.err
 }
 
+type MockCognito struct {
+	err   error
+	token string
+	user  cognito.GetUserOutput
+}
+
+func (m *MockCognito) SignUp(user *cognitoClient.CognitoUser) error {
+	return m.err
+}
+
+func (m *MockCognito) ConfirmAccount(user *cognitoClient.UserConfirmation) error {
+	return m.err
+}
+
+func (m *MockCognito) SignIn(user *cognitoClient.UserLogin) (string, error) {
+	return m.token, m.err
+}
+
+func (m *MockCognito) GetUserByToken(token string) (*cognito.GetUserOutput, error) {
+	return &m.user, m.err
+}
+
+func (m *MockCognito) UpdatePassword(user *cognitoClient.UserLogin) error {
+	return m.err
+}
+
 func TestHanler_GetUser(t *testing.T) {
 	type args struct {
+		cognito cognitoClient.CognitoInterface
 		storage user.Storage
 		r       func() *http.Request
 	}
@@ -50,6 +79,7 @@ func TestHanler_GetUser(t *testing.T) {
 		{
 			name: "get_by_id_returns_200",
 			args: args{
+				cognito: &MockCognito{},
 				storage: &MockStorage{},
 				r: func() *http.Request {
 					req, _ := http.NewRequest(http.MethodGet, "/users/id", nil)
@@ -62,6 +92,7 @@ func TestHanler_GetUser(t *testing.T) {
 		{
 			name: "get_by_id_returns_500_when_storage_misbehaves",
 			args: args{
+				cognito: &MockCognito{},
 				storage: &MockStorage{
 					err: errors.New("something's wrong"),
 				},
@@ -76,6 +107,7 @@ func TestHanler_GetUser(t *testing.T) {
 		{
 			name: "get_by_id_returns_404_when_user_doesnt_exist",
 			args: args{
+				cognito: &MockCognito{},
 				storage: &MockStorage{
 					err: errors.New("sql: no rows in result set"),
 				},
@@ -90,6 +122,7 @@ func TestHanler_GetUser(t *testing.T) {
 		{
 			name: "get_by_id_returns_400_when_id_is_empty",
 			args: args{
+				cognito: &MockCognito{},
 				storage: &MockStorage{},
 				r: func() *http.Request {
 					req, _ := http.NewRequest(http.MethodGet, "/users/", nil)
@@ -102,7 +135,8 @@ func TestHanler_GetUser(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := user.GetUser(tt.args.storage)
+			hanlder := user.NewHandler(tt.args.storage, tt.args.cognito)
+			handler := user.GetUser(hanlder)
 			w := httptest.NewRecorder()
 			handler(w, tt.args.r())
 			result := w.Result()
@@ -115,6 +149,7 @@ func TestHanler_GetUser(t *testing.T) {
 
 func TestHanler_GetUsers(t *testing.T) {
 	type args struct {
+		cognito cognitoClient.CognitoInterface
 		storage user.Storage
 		r       func() *http.Request
 	}
@@ -127,6 +162,7 @@ func TestHanler_GetUsers(t *testing.T) {
 		{
 			name: "get_all_returns_200",
 			args: args{
+				cognito: &MockCognito{},
 				storage: &MockStorage{},
 				r: func() *http.Request {
 					req, _ := http.NewRequest(http.MethodGet, "/users/", nil)
@@ -138,6 +174,7 @@ func TestHanler_GetUsers(t *testing.T) {
 		{
 			name: "get_all_returns_500_when_storage_misbehaves",
 			args: args{
+				cognito: &MockCognito{},
 				storage: &MockStorage{
 					err: errors.New("something's wrong"),
 				},
@@ -152,7 +189,8 @@ func TestHanler_GetUsers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := user.GetUsers(tt.args.storage)
+			userHanlder := user.NewHandler(tt.args.storage, tt.args.cognito)
+			handler := user.GetUsers(userHanlder)
 			w := httptest.NewRecorder()
 			handler(w, tt.args.r())
 			result := w.Result()
@@ -165,6 +203,7 @@ func TestHanler_GetUsers(t *testing.T) {
 
 func TestHanler_CreateUser(t *testing.T) {
 	type args struct {
+		cognito cognitoClient.CognitoInterface
 		storage user.Storage
 		r       func() *http.Request
 	}
@@ -177,44 +216,34 @@ func TestHanler_CreateUser(t *testing.T) {
 		{
 			name: "create_returns_201",
 			args: args{
+				cognito: &MockCognito{},
 				storage: &MockStorage{},
 				r: func() *http.Request {
-					req, _ := http.NewRequest(http.MethodPost, "/users/", bytes.NewReader([]byte(`{"username":"john","email":"johndoe@email.com","password":"helloworld"}`)))
+					req, _ := http.NewRequest(http.MethodPost, "/users/", bytes.NewReader([]byte(`{"nickname":"john","email":"johndoe@email.com","password":"helloworld"}`)))
 					return req
 				},
 			},
 			wantStatusCode: http.StatusCreated,
 		},
 		{
-			name: "create_returns_500_when_storage_misbehaves",
+			name: "create_returns_400_when_cognito_misbehaves",
 			args: args{
-				storage: &MockStorage{
-					err: errors.New("something's wrong"),
-				},
-				r: func() *http.Request {
-					req, _ := http.NewRequest(http.MethodPost, "/users/", bytes.NewReader([]byte(`{"username":"john","email":"johndoe@email.com","password":"helloworld"}`)))
-					return req
-				},
-			},
-			wantStatusCode: http.StatusInternalServerError,
-		},
-		{
-			name: "create_returns_400_when_request_body_is_invalid",
-			args: args{
+				cognito: &MockCognito{err: errors.New("something's wrong")},
 				storage: &MockStorage{},
 				r: func() *http.Request {
-					req, _ := http.NewRequest(http.MethodPost, "/users/", nil)
+					req, _ := http.NewRequest(http.MethodPost, "/users/", bytes.NewReader([]byte(`{"nickname":"john","email":"johndoe@email.com","password":"helloworld"}`)))
 					return req
 				},
 			},
 			wantStatusCode: http.StatusBadRequest,
 		},
 		{
-			name: "create_returns_400_when_request_params_are_invalid",
+			name: "create_returns_400_when_request_body_is_invalid",
 			args: args{
+				cognito: &MockCognito{},
 				storage: &MockStorage{},
 				r: func() *http.Request {
-					req, _ := http.NewRequest(http.MethodPost, "/users/", bytes.NewReader([]byte(`{"password":"helloworld"}`)))
+					req, _ := http.NewRequest(http.MethodPost, "/users/", nil)
 					return req
 				},
 			},
@@ -224,7 +253,8 @@ func TestHanler_CreateUser(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := user.CreateUser(tt.args.storage)
+			userHandler := user.NewHandler(tt.args.storage, tt.args.cognito)
+			handler := user.CreateUser(userHandler)
 			w := httptest.NewRecorder()
 			handler(w, tt.args.r())
 			result := w.Result()
@@ -237,6 +267,7 @@ func TestHanler_CreateUser(t *testing.T) {
 
 func TestHanler_UpdateUser(t *testing.T) {
 	type args struct {
+		cognito cognitoClient.CognitoInterface
 		storage user.Storage
 		r       func() *http.Request
 	}
@@ -249,9 +280,10 @@ func TestHanler_UpdateUser(t *testing.T) {
 		{
 			name: "update_returns_200",
 			args: args{
+				cognito: &MockCognito{},
 				storage: &MockStorage{},
 				r: func() *http.Request {
-					req, _ := http.NewRequest(http.MethodPut, "/users/id", bytes.NewReader([]byte(`{"username":"john","email":"johndoe@email.com","password":"helloworld"}`)))
+					req, _ := http.NewRequest(http.MethodPut, "/users/id", bytes.NewReader([]byte(`{"nickname":"john","email":"johndoe@email.com","password":"helloworld"}`)))
 					req.SetPathValue("id", "id")
 					return req
 				},
@@ -261,11 +293,12 @@ func TestHanler_UpdateUser(t *testing.T) {
 		{
 			name: "update_returns_500_when_storage_misbehaves",
 			args: args{
+				cognito: &MockCognito{},
 				storage: &MockStorage{
 					err: errors.New("something's wrong"),
 				},
 				r: func() *http.Request {
-					req, _ := http.NewRequest(http.MethodPut, "/users/id", bytes.NewReader([]byte(`{"username":"john","email":"johndoe@email.com","password":"helloworld"}`)))
+					req, _ := http.NewRequest(http.MethodPut, "/users/id", bytes.NewReader([]byte(`{"nickname":"john","email":"johndoe@email.com","password":"helloworld"}`)))
 					req.SetPathValue("id", "id")
 					return req
 				},
@@ -275,6 +308,7 @@ func TestHanler_UpdateUser(t *testing.T) {
 		{
 			name: "update_returns_400_when_request_body_is_invalid",
 			args: args{
+				cognito: &MockCognito{},
 				storage: &MockStorage{},
 				r: func() *http.Request {
 					req, _ := http.NewRequest(http.MethodPut, "/users/id", nil)
@@ -287,21 +321,10 @@ func TestHanler_UpdateUser(t *testing.T) {
 		{
 			name: "update_returns_400_when_id_is_empty",
 			args: args{
+				cognito: &MockCognito{},
 				storage: &MockStorage{},
 				r: func() *http.Request {
-					req, _ := http.NewRequest(http.MethodPut, "/users/", bytes.NewReader([]byte(`{"username":"john","email":"johndoe@email.com","password":"helloworld"}`)))
-					return req
-				},
-			},
-			wantStatusCode: http.StatusBadRequest,
-		},
-		{
-			name: "update_returns_400_when_request_params_are_invalid",
-			args: args{
-				storage: &MockStorage{},
-				r: func() *http.Request {
-					req, _ := http.NewRequest(http.MethodPut, "/users/id", bytes.NewReader([]byte(`{"password":"helloworld"}`)))
-					req.SetPathValue("id", "id")
+					req, _ := http.NewRequest(http.MethodPut, "/users/", bytes.NewReader([]byte(`{"nickname":"john","email":"johndoe@email.com","password":"helloworld"}`)))
 					return req
 				},
 			},
@@ -311,7 +334,8 @@ func TestHanler_UpdateUser(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := user.UpdateUser(tt.args.storage)
+			userHanlder := user.NewHandler(tt.args.storage, tt.args.cognito)
+			handler := user.UpdateUser(userHanlder)
 			w := httptest.NewRecorder()
 			handler(w, tt.args.r())
 			result := w.Result()
@@ -324,6 +348,7 @@ func TestHanler_UpdateUser(t *testing.T) {
 
 func TestHanler_DeleteUser(t *testing.T) {
 	type args struct {
+		cognito cognitoClient.CognitoInterface
 		storage user.Storage
 		r       func() *http.Request
 	}
@@ -336,6 +361,7 @@ func TestHanler_DeleteUser(t *testing.T) {
 		{
 			name: "delete_returns_200",
 			args: args{
+				cognito: &MockCognito{},
 				storage: &MockStorage{},
 				r: func() *http.Request {
 					req, _ := http.NewRequest(http.MethodDelete, "/users/id", nil)
@@ -348,6 +374,7 @@ func TestHanler_DeleteUser(t *testing.T) {
 		{
 			name: "delete_returns_500_when_storage_misbehaves",
 			args: args{
+				cognito: &MockCognito{},
 				storage: &MockStorage{
 					err: errors.New("something's wrong"),
 				},
@@ -362,6 +389,7 @@ func TestHanler_DeleteUser(t *testing.T) {
 		{
 			name: "delete_returns_400_when_id_is_empty",
 			args: args{
+				cognito: &MockCognito{},
 				storage: &MockStorage{},
 				r: func() *http.Request {
 					req, _ := http.NewRequest(http.MethodDelete, "/users/", nil)
@@ -373,6 +401,7 @@ func TestHanler_DeleteUser(t *testing.T) {
 		{
 			name: "get_by_id_returns_404_when_user_doesnt_exist",
 			args: args{
+				cognito: &MockCognito{},
 				storage: &MockStorage{
 					err: errors.New("sql: no rows in result set"),
 				},
@@ -388,7 +417,8 @@ func TestHanler_DeleteUser(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := user.DeleteUser(tt.args.storage)
+			userHanlder := user.NewHandler(tt.args.storage, tt.args.cognito)
+			handler := user.DeleteUser(userHanlder)
 			w := httptest.NewRecorder()
 			handler(w, tt.args.r())
 			result := w.Result()

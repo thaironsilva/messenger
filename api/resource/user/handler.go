@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"time"
+
+	"github.com/thaironsilva/messenger/cognitoClient"
 )
 
 var badRequestResponse = []byte(`{"message":"bad request"}`)
@@ -20,7 +21,19 @@ type Storage interface {
 	Delete(is string) error
 }
 
-func GetUser(storage Storage) http.HandlerFunc {
+type UserHandler struct {
+	storage Storage
+	cognito cognitoClient.CognitoInterface
+}
+
+func NewHandler(storage Storage, cognito cognitoClient.CognitoInterface) UserHandler {
+	return UserHandler{
+		storage: storage,
+		cognito: cognito,
+	}
+}
+
+func GetUser(h UserHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -37,7 +50,7 @@ func GetUser(storage Storage) http.HandlerFunc {
 			return
 		}
 
-		user, err := storage.GetById(id)
+		user, err := h.storage.GetById(id)
 
 		if err != nil {
 			if err.Error() == "sql: no rows in result set" {
@@ -60,7 +73,7 @@ func GetUser(storage Storage) http.HandlerFunc {
 	}
 }
 
-func GetUsers(storage Storage) http.HandlerFunc {
+func GetUsers(h UserHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method != http.MethodGet {
@@ -69,7 +82,7 @@ func GetUsers(storage Storage) http.HandlerFunc {
 			return
 		}
 
-		users, err := storage.GetAll()
+		users, err := h.storage.GetAll()
 
 		if err != nil {
 			log.Println("Error listing users:", err)
@@ -88,7 +101,7 @@ func GetUsers(storage Storage) http.HandlerFunc {
 	}
 }
 
-func CreateUser(storage Storage) http.HandlerFunc {
+func CreateUser(h UserHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -105,27 +118,30 @@ func CreateUser(storage Storage) http.HandlerFunc {
 			return
 		}
 
-		var newUser User
+		var cognitoUser cognitoClient.CognitoUser
 
-		if err := json.NewDecoder(r.Body).Decode(&newUser); err != nil {
+		if err := json.NewDecoder(r.Body).Decode(&cognitoUser); err != nil {
 			log.Println("Error decoding user:", err)
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write(badRequestResponse)
 			return
 		}
 
-		if err := newUser.IsValid(); err != nil {
-			log.Println("Error validating parameters:", err)
+		err := h.cognito.SignUp(&cognitoUser)
+
+		if err != nil {
+			log.Println("Error occurred while trying to sign up:", err)
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write(badRequestResponse)
+			w.Write([]byte(fmt.Sprintf(`{"message": %s}`, err)))
 			return
 		}
 
-		now := time.Now()
-		newUser.CreatedAt = now
-		newUser.UpdatedAt = now
+		newUser := User{
+			Username: cognitoUser.NickName,
+			Email:    cognitoUser.Email,
+		}
 
-		if err := storage.Create(newUser); err != nil {
+		if err := h.storage.Create(newUser); err != nil {
 			log.Println("Error occurred while trying to create user:", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(fmt.Sprintf(`{"message": %s}`, err)))
@@ -137,7 +153,7 @@ func CreateUser(storage Storage) http.HandlerFunc {
 	}
 }
 
-func UpdateUser(storage Storage) http.HandlerFunc {
+func UpdateUser(h UserHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -154,7 +170,7 @@ func UpdateUser(storage Storage) http.HandlerFunc {
 			return
 		}
 
-		user, err := storage.GetById(id)
+		user, err := h.storage.GetById(id)
 
 		if err != nil {
 			if err.Error() == "sql: no rows in result set" {
@@ -183,19 +199,10 @@ func UpdateUser(storage Storage) http.HandlerFunc {
 			return
 		}
 
-		if err := updatedUser.IsValid(); err != nil {
-			log.Println("Error validating parameters:", err)
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write(badRequestResponse)
-			return
-		}
-
 		user.Username = updatedUser.Username
 		user.Email = updatedUser.Email
-		user.Password = updatedUser.Password
-		user.UpdatedAt = time.Now()
 
-		if err := storage.Update(user); err != nil {
+		if err := h.storage.Update(user); err != nil {
 			log.Println("Error occurred while trying to update user:", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(fmt.Sprintf(`{"message": %s}`, err)))
@@ -207,7 +214,7 @@ func UpdateUser(storage Storage) http.HandlerFunc {
 	}
 }
 
-func DeleteUser(storage Storage) http.HandlerFunc {
+func DeleteUser(h UserHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -224,7 +231,7 @@ func DeleteUser(storage Storage) http.HandlerFunc {
 			return
 		}
 
-		_, err := storage.GetById(id)
+		_, err := h.storage.GetById(id)
 
 		if err != nil {
 			if err.Error() == "sql: no rows in result set" {
@@ -237,7 +244,7 @@ func DeleteUser(storage Storage) http.HandlerFunc {
 			return
 		}
 
-		if err := storage.Delete(id); err != nil {
+		if err := h.storage.Delete(id); err != nil {
 			log.Println("Error occurred while trying to update user:", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(fmt.Sprintf(`{"message": %s}`, err)))
@@ -245,5 +252,44 @@ func DeleteUser(storage Storage) http.HandlerFunc {
 		}
 
 		w.WriteHeader(http.StatusOK)
+	}
+}
+
+func ConfirmAccount(h UserHandler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			w.Write(methodNotAllowedResponse)
+			return
+		}
+
+		if r.Body == nil {
+			log.Println("create requires a request body")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write(badRequestResponse)
+			return
+		}
+
+		var cognitoUser cognitoClient.UserConfirmation
+
+		if err := json.NewDecoder(r.Body).Decode(&cognitoUser); err != nil {
+			log.Println("Error decoding user:", err)
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write(badRequestResponse)
+			return
+		}
+
+		err := h.cognito.ConfirmAccount(&cognitoUser)
+
+		if err != nil {
+			log.Println("Error occurred while trying to confirm account:", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf(`{"message": %s}`, err)))
+		}
+
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(cognitoUser)
 	}
 }
