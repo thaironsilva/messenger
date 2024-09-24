@@ -1,14 +1,13 @@
 package cognitoClient
 
 import (
-	"os"
-
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	cognito "github.com/aws/aws-sdk-go/service/cognitoidentityprovider"
 )
 
 const cognitoClientId = "qiqoemp8hjlt1ar1qf1233o7t"
+const userPoolId = "us-east-2_bGTPLFgM7"
 
 type CognitoInterface interface {
 	SignUp(user *CognitoUser) error
@@ -37,6 +36,13 @@ type UserConfirmation struct {
 type UserLogin struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
+}
+
+type UserResponse struct {
+	ID            string `json:"id"`
+	Username      string `json:"username"`
+	Email         string `json:"email"`
+	EmailVerified bool   `json:"email_verified"`
 }
 
 func NewCognitoClient() CognitoInterface {
@@ -118,7 +124,7 @@ func (c *cognitoClient) GetUserByToken(token string) (*cognito.GetUserOutput, er
 
 func (c *cognitoClient) UpdatePassword(user *UserLogin) error {
 	input := &cognito.AdminSetUserPasswordInput{
-		UserPoolId: aws.String(os.Getenv("COGNITO_USER_POOL_ID")),
+		UserPoolId: aws.String(userPoolId),
 		Username:   aws.String(user.Email),
 		Password:   aws.String(user.Password),
 		Permanent:  aws.Bool(true),

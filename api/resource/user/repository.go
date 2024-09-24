@@ -60,11 +60,3 @@ func (r *Repository) Update(user User) error {
 	}
 	return nil
 }
-
-func (r *Repository) Delete(id string) error {
-	_, err := r.db.Exec("DELETE FROM users WHERE id=$1", id)
-	if err != nil {
-		return err
-	}
-	return nil
-}

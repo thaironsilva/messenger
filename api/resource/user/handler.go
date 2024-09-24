@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/thaironsilva/messenger/cognitoClient"
 )
@@ -12,13 +14,13 @@ import (
 var badRequestResponse = []byte(`{"message":"bad request"}`)
 var methodNotAllowedResponse = []byte(`{"message":"method not allowed"}`)
 var notFoundResponse = []byte(`{"message":"user not found"}`)
+var unauthorizedResponse = []byte(`{"message":"unauthorized token"}`)
 
 type Storage interface {
 	GetById(id string) (User, error)
 	GetAll() ([]User, error)
 	Create(user User) error
 	Update(user User) error
-	Delete(is string) error
 }
 
 type UserHandler struct {
@@ -43,19 +45,20 @@ func GetUser(h UserHandler) http.HandlerFunc {
 			return
 		}
 
-		id := r.PathValue("id")
-		if id == "" {
+		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+
+		if token == "" {
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(`{"message":"user id should be provided as the value of an 'id' querystring parameter"}`))
+			w.Write(badRequestResponse)
 			return
 		}
 
-		user, err := h.storage.GetById(id)
+		cognitoUser, err := h.cognito.GetUserByToken(token)
 
 		if err != nil {
-			if err.Error() == "sql: no rows in result set" {
-				w.WriteHeader(http.StatusNotFound)
-				w.Write(notFoundResponse)
+			if err.Error() == "NotAuthorizedException: Could not verify signature for Access Token" {
+				w.WriteHeader(http.StatusUnauthorized)
+				w.Write(unauthorizedResponse)
 				return
 			}
 			w.WriteHeader(http.StatusInternalServerError)
@@ -63,10 +66,28 @@ func GetUser(h UserHandler) http.HandlerFunc {
 			return
 		}
 
+		user := &cognitoClient.UserResponse{}
+
+		for _, attribute := range cognitoUser.UserAttributes {
+			switch *attribute.Name {
+			case "sub":
+				user.ID = *attribute.Value
+			case "nickname":
+				user.Username = *attribute.Value
+			case "email":
+				user.Email = *attribute.Value
+			case "email_verified":
+				emailVerified, err := strconv.ParseBool(*attribute.Value)
+				if err == nil {
+					user.EmailVerified = emailVerified
+				}
+			}
+		}
+
 		err = json.NewEncoder(w).Encode(user)
 
 		if err != nil {
-			log.Println("Error encoding users:", err)
+			log.Println("Error encoding user:", err)
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -153,29 +174,22 @@ func CreateUser(h UserHandler) http.HandlerFunc {
 	}
 }
 
-func UpdateUser(h UserHandler) http.HandlerFunc {
+func UpdatePassword(h UserHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 
-		if r.Method != http.MethodPut {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			w.Write(methodNotAllowedResponse)
-			return
-		}
-
-		id := r.PathValue("id")
-		if id == "" {
+		if token == "" {
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(`{"message":"user id should be provided as the value of an 'id' querystring parameter"}`))
+			w.Write(badRequestResponse)
 			return
 		}
 
-		user, err := h.storage.GetById(id)
+		cognitoUser, err := h.cognito.GetUserByToken(token)
 
 		if err != nil {
-			if err.Error() == "sql: no rows in result set" {
-				w.WriteHeader(http.StatusNotFound)
-				w.Write(notFoundResponse)
+			if err.Error() == "NotAuthorizedException: Could not verify signature for Access Token" {
+				w.WriteHeader(http.StatusUnauthorized)
+				w.Write(unauthorizedResponse)
 				return
 			}
 			w.WriteHeader(http.StatusInternalServerError)
@@ -184,26 +198,32 @@ func UpdateUser(h UserHandler) http.HandlerFunc {
 		}
 
 		if r.Body == nil {
-			log.Println("update requires a request body")
+			log.Println("update password requires a request body")
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write(badRequestResponse)
 			return
 		}
 
-		var updatedUser User
+		var user cognitoClient.UserLogin
 
-		if err := json.NewDecoder(r.Body).Decode(&updatedUser); err != nil {
+		if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
 			log.Println("Error decoding user:", err)
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write(badRequestResponse)
 			return
 		}
 
-		user.Username = updatedUser.Username
-		user.Email = updatedUser.Email
+		for _, attribute := range cognitoUser.UserAttributes {
+			if *attribute.Name == "email" && *attribute.Value != user.Email {
+				log.Println("Error updating password.")
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write(badRequestResponse)
+				return
+			}
+		}
 
-		if err := h.storage.Update(user); err != nil {
-			log.Println("Error occurred while trying to update user:", err)
+		if err := h.cognito.UpdatePassword(&user); err != nil {
+			log.Println("Error occurred while trying to update user password:", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(fmt.Sprintf(`{"message": %s}`, err)))
 			return
@@ -211,47 +231,6 @@ func UpdateUser(h UserHandler) http.HandlerFunc {
 
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(user)
-	}
-}
-
-func DeleteUser(h UserHandler) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-
-		if r.Method != http.MethodDelete {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			w.Write(methodNotAllowedResponse)
-			return
-		}
-
-		id := r.PathValue("id")
-		if id == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(`{"message":"user id should be provided as the value of an 'id' querystring parameter"}`))
-			return
-		}
-
-		_, err := h.storage.GetById(id)
-
-		if err != nil {
-			if err.Error() == "sql: no rows in result set" {
-				w.WriteHeader(http.StatusNotFound)
-				w.Write(notFoundResponse)
-				return
-			}
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(fmt.Sprintf(`{"message": %s}`, err)))
-			return
-		}
-
-		if err := h.storage.Delete(id); err != nil {
-			log.Println("Error occurred while trying to update user:", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(fmt.Sprintf(`{"message": %s}`, err)))
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
 	}
 }
 
@@ -266,7 +245,7 @@ func ConfirmAccount(h UserHandler) http.HandlerFunc {
 		}
 
 		if r.Body == nil {
-			log.Println("create requires a request body")
+			log.Println("confirm requires a request body")
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write(badRequestResponse)
 			return
@@ -285,11 +264,50 @@ func ConfirmAccount(h UserHandler) http.HandlerFunc {
 
 		if err != nil {
 			log.Println("Error occurred while trying to confirm account:", err)
-			w.WriteHeader(http.StatusInternalServerError)
+			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte(fmt.Sprintf(`{"message": %s}`, err)))
+			return
 		}
 
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(cognitoUser)
+	}
+}
+
+func SignIn(h UserHandler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			w.Write(methodNotAllowedResponse)
+			return
+		}
+
+		var user cognitoClient.UserLogin
+
+		if r.Body == nil {
+			log.Println("login requires a request body")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write(badRequestResponse)
+			return
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+			log.Println("Error decoding user:", err)
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write(badRequestResponse)
+			return
+		}
+
+		token, err := h.cognito.SignIn(&user)
+
+		if err != nil {
+			log.Println("Error occurred while trying to signin:", err)
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(fmt.Sprintf(`{"message": %s}`, err)))
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(token)
 	}
 }
