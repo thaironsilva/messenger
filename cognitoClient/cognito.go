@@ -1,13 +1,12 @@
 package cognitoClient
 
 import (
+	"os"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	cognito "github.com/aws/aws-sdk-go/service/cognitoidentityprovider"
 )
-
-const cognitoClientId = "qiqoemp8hjlt1ar1qf1233o7t"
-const userPoolId = "us-east-2_bGTPLFgM7"
 
 type CognitoInterface interface {
 	SignUp(user *CognitoUser) error
@@ -15,6 +14,7 @@ type CognitoInterface interface {
 	SignIn(user *UserLogin) (string, error)
 	GetUserByToken(token string) (*cognito.GetUserOutput, error)
 	UpdatePassword(user *UserLogin) error
+	DeleteUser(token string) error
 }
 
 type CognitoUser struct {
@@ -55,7 +55,7 @@ func NewCognitoClient() CognitoInterface {
 
 	return &cognitoClient{
 		cognitoClient: client,
-		appClientID:   cognitoClientId,
+		appClientID:   os.Getenv("COGNITO_CLIENT_ID"),
 	}
 }
 
@@ -124,12 +124,22 @@ func (c *cognitoClient) GetUserByToken(token string) (*cognito.GetUserOutput, er
 
 func (c *cognitoClient) UpdatePassword(user *UserLogin) error {
 	input := &cognito.AdminSetUserPasswordInput{
-		UserPoolId: aws.String(userPoolId),
+		UserPoolId: aws.String(os.Getenv("COGNITO_USER_POOL_ID")),
 		Username:   aws.String(user.Email),
 		Password:   aws.String(user.Password),
 		Permanent:  aws.Bool(true),
 	}
 	_, err := c.cognitoClient.AdminSetUserPassword(input)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *cognitoClient) DeleteUser(token string) error {
+	_, err := c.cognitoClient.DeleteUser(&cognito.DeleteUserInput{
+		AccessToken: aws.String(token),
+	})
 	if err != nil {
 		return err
 	}

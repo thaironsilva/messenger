@@ -17,10 +17,12 @@ var notFoundResponse = []byte(`{"message":"user not found"}`)
 var unauthorizedResponse = []byte(`{"message":"unauthorized token"}`)
 
 type Storage interface {
-	GetById(id string) (User, error)
+	GetByEmail(email string) (User, error)
+	GetByName(name string) ([]User, error)
 	GetAll() ([]User, error)
 	Create(user User) error
 	Update(user User) error
+	Delete(id string) error
 }
 
 type UserHandler struct {
@@ -97,13 +99,45 @@ func GetUser(h UserHandler) http.HandlerFunc {
 func GetUsers(h UserHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+
 		if r.Method != http.MethodGet {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			w.Write(methodNotAllowedResponse)
 			return
 		}
 
-		users, err := h.storage.GetAll()
+		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+
+		if token == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write(badRequestResponse)
+			return
+		}
+
+		_, err := h.cognito.GetUserByToken(token)
+
+		if err != nil {
+			if err.Error() == "NotAuthorizedException: Could not verify signature for Access Token" {
+				w.WriteHeader(http.StatusUnauthorized)
+				w.Write(unauthorizedResponse)
+				return
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf(`{"message": %s}`, err)))
+			return
+		}
+
+		name := r.URL.Query().Get("name")
+
+		fmt.Println(name)
+
+		var users []User
+
+		if name == "" {
+			users, err = h.storage.GetAll()
+		} else {
+			users, err = h.storage.GetByName(name)
+		}
 
 		if err != nil {
 			log.Println("Error listing users:", err)
@@ -309,5 +343,75 @@ func SignIn(h UserHandler) http.HandlerFunc {
 
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(token)
+	}
+}
+
+func DeleteUser(h UserHandler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.Method != http.MethodDelete {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			w.Write(methodNotAllowedResponse)
+			return
+		}
+
+		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+
+		if token == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write(badRequestResponse)
+			return
+		}
+
+		cognitoUser, err := h.cognito.GetUserByToken(token)
+
+		if err != nil {
+			if err.Error() == "NotAuthorizedException: Could not verify signature for Access Token" {
+				w.WriteHeader(http.StatusUnauthorized)
+				w.Write(unauthorizedResponse)
+				return
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf(`{"message": %s}`, err)))
+			return
+		}
+
+		if err := h.cognito.DeleteUser(token); err != nil {
+			log.Println("Error occurred while trying to delete cognito user:", err)
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write(badRequestResponse)
+			return
+		}
+
+		var email string
+
+		for _, attribute := range cognitoUser.UserAttributes {
+			if *attribute.Name == "email" {
+				email = *attribute.Value
+			}
+		}
+
+		user, err := h.storage.GetByEmail(email)
+
+		if err != nil {
+			if err.Error() == "sql: no rows in result set" {
+				w.WriteHeader(http.StatusNotFound)
+				w.Write(notFoundResponse)
+				return
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf(`{"message": %s}`, err)))
+			return
+		}
+
+		if err := h.storage.Delete(user.Id); err != nil {
+			log.Println("Error occurred while trying to update user:", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(fmt.Sprintf(`{"message": %s}`, err)))
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
 	}
 }

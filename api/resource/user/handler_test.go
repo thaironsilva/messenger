@@ -18,8 +18,12 @@ type MockStorage struct {
 	users []user.User
 }
 
-func (m *MockStorage) GetById(id string) (user.User, error) {
+func (m *MockStorage) GetByEmail(email string) (user.User, error) {
 	return m.user, m.err
+}
+
+func (m *MockStorage) GetByName(name string) ([]user.User, error) {
+	return m.users, m.err
 }
 
 func (m *MockStorage) GetAll() ([]user.User, error) {
@@ -61,6 +65,10 @@ func (m *MockCognito) GetUserByToken(token string) (*cognito.GetUserOutput, erro
 }
 
 func (m *MockCognito) UpdatePassword(user *cognitoClient.UserLogin) error {
+	return m.err
+}
+
+func (m *MockCognito) DeleteUser(token string) error {
 	return m.err
 }
 
@@ -172,6 +180,87 @@ func TestHanler_CreateUser(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			userHandler := user.NewHandler(tt.args.storage, tt.args.cognito)
 			handler := user.CreateUser(userHandler)
+			w := httptest.NewRecorder()
+			handler(w, tt.args.r())
+			result := w.Result()
+			if result.StatusCode != tt.wantStatusCode {
+				t.Errorf("expected '%d' but got '%d'", tt.wantStatusCode, result.StatusCode)
+			}
+		})
+	}
+}
+
+func TestHanler_DeleteUser(t *testing.T) {
+	type args struct {
+		cognito cognitoClient.CognitoInterface
+		storage user.Storage
+		r       func() *http.Request
+	}
+	tests := []struct {
+		name           string
+		args           args
+		wantStatusCode int
+	}{
+		{
+			name: "delete_returns_200",
+			args: args{
+				cognito: &MockCognito{},
+				storage: &MockStorage{},
+				r: func() *http.Request {
+					req, _ := http.NewRequest(http.MethodDelete, "/users/id", nil)
+					req.SetPathValue("id", "id")
+					return req
+				},
+			},
+			wantStatusCode: http.StatusOK,
+		},
+		{
+			name: "delete_returns_500_when_storage_misbehaves",
+			args: args{
+				cognito: &MockCognito{},
+				storage: &MockStorage{
+					err: errors.New("something's wrong"),
+				},
+				r: func() *http.Request {
+					req, _ := http.NewRequest(http.MethodDelete, "/users/id", nil)
+					req.SetPathValue("id", "id")
+					return req
+				},
+			},
+			wantStatusCode: http.StatusInternalServerError,
+		},
+		{
+			name: "delete_returns_400_when_id_is_empty",
+			args: args{
+				cognito: &MockCognito{},
+				storage: &MockStorage{},
+				r: func() *http.Request {
+					req, _ := http.NewRequest(http.MethodDelete, "/users/", nil)
+					return req
+				},
+			},
+			wantStatusCode: http.StatusBadRequest,
+		},
+		{
+			name: "get_by_id_returns_404_when_user_doesnt_exist",
+			args: args{
+				cognito: &MockCognito{},
+				storage: &MockStorage{
+					err: errors.New("sql: no rows in result set"),
+				},
+				r: func() *http.Request {
+					req, _ := http.NewRequest(http.MethodDelete, "/users/id", nil)
+					req.SetPathValue("id", "id")
+					return req
+				},
+			},
+			wantStatusCode: http.StatusNotFound,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			userHanlder := user.NewHandler(tt.args.storage, tt.args.cognito)
+			handler := user.DeleteUser(userHanlder)
 			w := httptest.NewRecorder()
 			handler(w, tt.args.r())
 			result := w.Result()
