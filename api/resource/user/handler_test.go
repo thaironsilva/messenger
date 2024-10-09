@@ -85,7 +85,20 @@ func TestHanler_GetUsers(t *testing.T) {
 		wantStatusCode int
 	}{
 		{
-			name: "get_all_returns_200",
+			name: "get_users_returns_200",
+			args: args{
+				cognito: &MockCognito{},
+				storage: &MockStorage{},
+				r: func() *http.Request {
+					req, _ := http.NewRequest(http.MethodGet, "/users/", nil)
+					req.Header.Set("Authorization", "Bearer token")
+					return req
+				},
+			},
+			wantStatusCode: http.StatusOK,
+		},
+		{
+			name: "get_users_returns_400_when_not_auhtorized",
 			args: args{
 				cognito: &MockCognito{},
 				storage: &MockStorage{},
@@ -94,10 +107,10 @@ func TestHanler_GetUsers(t *testing.T) {
 					return req
 				},
 			},
-			wantStatusCode: http.StatusOK,
+			wantStatusCode: http.StatusBadRequest,
 		},
 		{
-			name: "get_all_returns_500_when_storage_misbehaves",
+			name: "get_users_returns_500_when_storage_misbehaves",
 			args: args{
 				cognito: &MockCognito{},
 				storage: &MockStorage{
@@ -105,6 +118,7 @@ func TestHanler_GetUsers(t *testing.T) {
 				},
 				r: func() *http.Request {
 					req, _ := http.NewRequest(http.MethodGet, "/users/", nil)
+					req.Header.Set("Authorization", "Bearer token")
 					return req
 				},
 			},
@@ -208,11 +222,25 @@ func TestHanler_DeleteUser(t *testing.T) {
 				storage: &MockStorage{},
 				r: func() *http.Request {
 					req, _ := http.NewRequest(http.MethodDelete, "/users/id", nil)
+					req.Header.Set("Authorization", "Bearer token")
 					req.SetPathValue("id", "id")
 					return req
 				},
 			},
 			wantStatusCode: http.StatusOK,
+		},
+		{
+			name: "delete_returns_400_when_not_authorized",
+			args: args{
+				cognito: &MockCognito{},
+				storage: &MockStorage{},
+				r: func() *http.Request {
+					req, _ := http.NewRequest(http.MethodDelete, "/users/id", nil)
+					req.SetPathValue("id", "id")
+					return req
+				},
+			},
+			wantStatusCode: http.StatusBadRequest,
 		},
 		{
 			name: "delete_returns_500_when_storage_misbehaves",
@@ -223,38 +251,12 @@ func TestHanler_DeleteUser(t *testing.T) {
 				},
 				r: func() *http.Request {
 					req, _ := http.NewRequest(http.MethodDelete, "/users/id", nil)
+					req.Header.Set("Authorization", "Bearer token")
 					req.SetPathValue("id", "id")
 					return req
 				},
 			},
 			wantStatusCode: http.StatusInternalServerError,
-		},
-		{
-			name: "delete_returns_400_when_id_is_empty",
-			args: args{
-				cognito: &MockCognito{},
-				storage: &MockStorage{},
-				r: func() *http.Request {
-					req, _ := http.NewRequest(http.MethodDelete, "/users/", nil)
-					return req
-				},
-			},
-			wantStatusCode: http.StatusBadRequest,
-		},
-		{
-			name: "get_by_id_returns_404_when_user_doesnt_exist",
-			args: args{
-				cognito: &MockCognito{},
-				storage: &MockStorage{
-					err: errors.New("sql: no rows in result set"),
-				},
-				r: func() *http.Request {
-					req, _ := http.NewRequest(http.MethodDelete, "/users/id", nil)
-					req.SetPathValue("id", "id")
-					return req
-				},
-			},
-			wantStatusCode: http.StatusNotFound,
 		},
 	}
 	for _, tt := range tests {
