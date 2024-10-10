@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	cognito "github.com/aws/aws-sdk-go/service/cognitoidentityprovider"
+	"github.com/thaironsilva/messenger/api/cognitoClient"
 	"github.com/thaironsilva/messenger/api/resource/user"
-	"github.com/thaironsilva/messenger/cognitoClient"
 )
 
 type MockStorage struct {

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/thaironsilva/messenger/cognitoClient"
+	"github.com/thaironsilva/messenger/api/cognitoClient"
 )
 
 var badRequestResponse = []byte(`{"message":"bad request"}`)

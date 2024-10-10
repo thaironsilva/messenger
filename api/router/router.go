@@ -4,8 +4,8 @@ import (
 	"database/sql"
 	"net/http"
 
+	"github.com/thaironsilva/messenger/api/cognitoClient"
 	"github.com/thaironsilva/messenger/api/resource/user"
-	"github.com/thaironsilva/messenger/cognitoClient"
 )
 
 func New(db *sql.DB) *http.ServeMux {
