@@ -12,10 +12,24 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/thaironsilva/messenger/api/cognitoClient"
 	"github.com/thaironsilva/messenger/api/connectionManager"
+	"github.com/thaironsilva/messenger/api/resource/message"
 	"github.com/thaironsilva/messenger/api/resource/user"
 
 	cognito "github.com/aws/aws-sdk-go/service/cognitoidentityprovider"
 )
+
+type MockMessageStorage struct {
+	err      error
+	messages []message.Message
+}
+
+func (m *MockMessageStorage) GetAll(sender_id string, receiver_id string) ([]message.Message, error) {
+	return m.messages, m.err
+}
+
+func (m *MockMessageStorage) Create(message message.Message) error {
+	return m.err
+}
 
 type MockUserStorage struct {
 	err   error
@@ -110,7 +124,7 @@ func (m *MockCognito) DeleteUser(token string) error {
 func TestConnectionManager_testHandleConnections(t *testing.T) {
 	t.Run("stabishes_double_sided_connection_and_exchange_messages", func(t *testing.T) {
 		wantCount := 100
-		connHandler := connectionManager.NewConnectionHandler(&MockUserStorage{}, &MockCognito{})
+		connHandler := connectionManager.NewConnectionHandler(&MockMessageStorage{}, &MockUserStorage{}, &MockCognito{})
 		s := httptest.NewServer(http.HandlerFunc(connHandler.HandleConnections))
 		defer s.Close()
 
@@ -202,7 +216,7 @@ func TestConnectionManager_testHandleConnections(t *testing.T) {
 
 	t.Run("establishes_one_sided_connection_and_dont_fail", func(t *testing.T) {
 		wantCount := 100
-		connHandler := connectionManager.NewConnectionHandler(&MockUserStorage{}, &MockCognito{})
+		connHandler := connectionManager.NewConnectionHandler(&MockMessageStorage{}, &MockUserStorage{}, &MockCognito{})
 		s := httptest.NewServer(http.HandlerFunc(connHandler.HandleConnections))
 		defer s.Close()
 

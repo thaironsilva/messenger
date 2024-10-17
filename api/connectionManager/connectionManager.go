@@ -5,24 +5,28 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/thaironsilva/messenger/api/cognitoClient"
+	"github.com/thaironsilva/messenger/api/resource/message"
 	"github.com/thaironsilva/messenger/api/resource/user"
 
 	"github.com/gorilla/websocket"
 )
 
 type ConnectionHandler struct {
-	userRepository user.Storage
+	messageStorage message.Storage
+	userStorage    user.Storage
 	cognito        cognitoClient.CognitoInterface
 	Clients        map[string]*websocket.Conn
 	Channels       map[string]chan string
 	mu             sync.Mutex
 }
 
-func NewConnectionHandler(userRepository user.Storage, cognito cognitoClient.CognitoInterface) *ConnectionHandler {
+func NewConnectionHandler(messageStorage message.Storage, userStorage user.Storage, cognito cognitoClient.CognitoInterface) *ConnectionHandler {
 	return &ConnectionHandler{
-		userRepository: userRepository,
+		messageStorage: messageStorage,
+		userStorage:    userStorage,
 		cognito:        cognito,
 		Clients:        make(map[string]*websocket.Conn),
 		Channels:       make(map[string]chan string),
@@ -64,7 +68,7 @@ func (h *ConnectionHandler) HandleConnections(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	sender, err := h.userRepository.GetByEmail(email)
+	sender, err := h.userStorage.GetByEmail(email)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -76,7 +80,7 @@ func (h *ConnectionHandler) HandleConnections(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	receiver, err := h.userRepository.GetByUsername(username)
+	receiver, err := h.userStorage.GetByUsername(username)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -101,7 +105,9 @@ func (h *ConnectionHandler) HandleConnections(w http.ResponseWriter, r *http.Req
 			if !open {
 				return
 			}
+
 			msg := <-receiveChannel
+
 			myConn, connected := h.Clients[sender.Username+"-"+receiver.Username]
 			if !connected {
 				return
@@ -120,6 +126,13 @@ func (h *ConnectionHandler) HandleConnections(w http.ResponseWriter, r *http.Req
 		err := conn.ReadJSON(&msg)
 		if err != nil {
 			fmt.Println(err)
+			return
+		}
+
+		newMessage := message.Message{SenderId: sender.Id, ReceiverId: receiver.Id, Body: msg, CreatedAt: time.Now().UTC()}
+
+		if err := h.messageStorage.Create(newMessage); err != nil {
+			fmt.Println("Error occurred while trying to create message:", err)
 			return
 		}
 

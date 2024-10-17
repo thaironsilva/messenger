@@ -14,10 +14,10 @@ func New(db *sql.DB) *http.ServeMux {
 	router := http.NewServeMux()
 
 	cognito := cognitoClient.NewCognitoClient()
-	userRepository := user.NewRepository(db)
 	messageRepository := message.NewRepository(db)
+	userRepository := user.NewRepository(db)
 
-	connHandler := connectionManager.NewConnectionHandler(userRepository, cognito)
+	connHandler := connectionManager.NewConnectionHandler(messageRepository, userRepository, cognito)
 	router.HandleFunc("/messages/{username}", connHandler.HandleConnections)
 
 	messageHandler := message.NewHandler(messageRepository, userRepository, cognito)
