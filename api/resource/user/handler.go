@@ -17,8 +17,9 @@ var notFoundResponse = []byte(`{"message":"user not found"}`)
 var unauthorizedResponse = []byte(`{"message":"unauthorized token"}`)
 
 type Storage interface {
+	GetByUsername(username string) (User, error)
 	GetByEmail(email string) (User, error)
-	GetByName(name string) ([]User, error)
+	GetByString(name string) ([]User, error)
 	GetAll() ([]User, error)
 	Create(user User) error
 	Update(user User) error
@@ -129,14 +130,12 @@ func GetUsers(h UserHandler) http.HandlerFunc {
 
 		name := r.URL.Query().Get("name")
 
-		fmt.Println(name)
-
 		var users []User
 
 		if name == "" {
 			users, err = h.storage.GetAll()
 		} else {
-			users, err = h.storage.GetByName(name)
+			users, err = h.storage.GetByString(name)
 		}
 
 		if err != nil {

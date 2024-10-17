@@ -15,6 +15,17 @@ func NewRepository(db *sql.DB) *Repository {
 	}
 }
 
+func (r *Repository) GetByUsername(username string) (User, error) {
+	row := r.db.QueryRow("SELECT * FROM users WHERE username = $1", username)
+
+	var user User
+	if err := row.Scan(&user.Id, &user.Username, &user.Email); err != nil {
+		return user, err
+	}
+
+	return user, nil
+}
+
 func (r *Repository) GetByEmail(email string) (User, error) {
 	row := r.db.QueryRow("SELECT * FROM users WHERE email = $1", email)
 
@@ -26,7 +37,7 @@ func (r *Repository) GetByEmail(email string) (User, error) {
 	return user, nil
 }
 
-func (r *Repository) GetByName(name string) ([]User, error) {
+func (r *Repository) GetByString(name string) ([]User, error) {
 	name = "%" + strings.ToLower(name) + "%"
 	rows, err := r.db.Query("SELECT * FROM users WHERE username LIKE $1 OR email LIKE $1", name)
 

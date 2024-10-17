@@ -18,11 +18,15 @@ type MockStorage struct {
 	users []user.User
 }
 
+func (m *MockStorage) GetByUsername(username string) (user.User, error) {
+	return m.user, m.err
+}
+
 func (m *MockStorage) GetByEmail(email string) (user.User, error) {
 	return m.user, m.err
 }
 
-func (m *MockStorage) GetByName(name string) ([]user.User, error) {
+func (m *MockStorage) GetByString(name string) ([]user.User, error) {
 	return m.users, m.err
 }
 

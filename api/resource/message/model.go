@@ -1,7 +1,11 @@
 package message
 
+import "time"
+
 type Message struct {
-	From string `json:"from" binding:"required"`
-	To   string `json:"to" binding:"required"`
-	Body string `json:"body" binding:"required"`
+	Id         string
+	SenderId   string    `json:"senderId" binding:"required"`
+	ReceiverId string    `json:"receiverId" binding:"required"`
+	Body       string    `json:"body" binding:"required"`
+	CreatedAt  time.Time `json:"createdAt" binding:"required"`
 }

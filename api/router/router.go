@@ -5,15 +5,25 @@ import (
 	"net/http"
 
 	"github.com/thaironsilva/messenger/api/cognitoClient"
+	"github.com/thaironsilva/messenger/api/connectionManager"
+	"github.com/thaironsilva/messenger/api/resource/message"
 	"github.com/thaironsilva/messenger/api/resource/user"
 )
 
 func New(db *sql.DB) *http.ServeMux {
 	router := http.NewServeMux()
 
-	repository := user.NewRepository(db)
 	cognito := cognitoClient.NewCognitoClient()
-	userHandler := user.NewHandler(repository, cognito)
+	userRepository := user.NewRepository(db)
+	messageRepository := message.NewRepository(db)
+
+	connHandler := connectionManager.NewConnectionHandler(userRepository, cognito)
+	router.HandleFunc("/messages/{username}", connHandler.HandleConnections)
+
+	messageHandler := message.NewHandler(messageRepository, userRepository, cognito)
+	router.HandleFunc("GET /api/v0/messages/{username}", message.GetMessages(messageHandler))
+
+	userHandler := user.NewHandler(userRepository, cognito)
 	router.HandleFunc("GET /api/v0/user", user.GetUser(userHandler))
 	router.HandleFunc("GET /api/v0/users", user.GetUsers(userHandler))
 	router.HandleFunc("POST /api/v0/users", user.CreateUser(userHandler))
