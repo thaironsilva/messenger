@@ -6,8 +6,8 @@ COPY . .
 
 RUN go get -d -v ./...
 
-RUN go build -o api ./cmd/app
+RUN go build ./cmd/app
 
 EXPOSE 8080
 
-CMD ["./api/app"]
+CMD ["./app"]

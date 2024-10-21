@@ -7,8 +7,8 @@ services:
     build: .
     environment:
       DATABASE_URL: "host=host.docker.internal user=postgres password=postgres dbname=postgres sslmode=disable"
-      COGNITO_CLIENT_ID: "qiqoemp8hjlt1ar1qf1233o7t"
-      COGNITO_USER_POOL_ID: "us-east-2_bGTPLFgM7"
+      COGNITO_CLIENT_ID: "10kissda9bdinuq2ss5msrhlce"
+      COGNITO_USER_POOL_ID: "us-east-2_dWmKItNTN"
       AWS_ACCESS_KEY_ID: AKIA53SEUVWTCL33UH4G
       AWS_SECRET_ACCESS_KEY: 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
       AWS_DEFAULT_REGION: us-west-2
