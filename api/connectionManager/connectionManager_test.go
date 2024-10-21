@@ -128,7 +128,7 @@ func TestConnectionManager_testHandleConnections(t *testing.T) {
 		s := httptest.NewServer(http.HandlerFunc(connHandler.HandleConnections))
 		defer s.Close()
 
-		u := "ws" + strings.TrimPrefix(s.URL, "http") + "/messages/user2"
+		u := "ws" + strings.TrimPrefix(s.URL, "http") + "/api/v0/chat/user2"
 
 		header := http.Header{}
 		header.Set("Authorization", "Bearer token1")
@@ -139,7 +139,7 @@ func TestConnectionManager_testHandleConnections(t *testing.T) {
 
 		defer ws1.Close()
 
-		u = "ws" + strings.TrimPrefix(s.URL, "http") + "/messages/user1"
+		u = "ws" + strings.TrimPrefix(s.URL, "http") + "/api/v0/chat/user1"
 
 		header = http.Header{}
 		header.Set("Authorization", "Bearer token2")
