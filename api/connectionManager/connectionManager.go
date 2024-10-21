@@ -42,7 +42,7 @@ func (h *ConnectionHandler) HandleConnections(w http.ResponseWriter, r *http.Req
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("upgrade failed: ", err)
 		return
 	}
 
@@ -70,11 +70,11 @@ func (h *ConnectionHandler) HandleConnections(w http.ResponseWriter, r *http.Req
 
 	sender, err := h.userStorage.GetByEmail(email)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("get sender failed", err)
 		return
 	}
 
-	username := strings.TrimPrefix(r.URL.Path, "/messages/")
+	username := strings.TrimPrefix(r.URL.Path, "/api/v0/chat/")
 	if username == "" {
 		fmt.Println("message: not found")
 		return
@@ -82,7 +82,7 @@ func (h *ConnectionHandler) HandleConnections(w http.ResponseWriter, r *http.Req
 
 	receiver, err := h.userStorage.GetByUsername(username)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("get receiver failed: ", err)
 		return
 	}
 
@@ -115,7 +115,7 @@ func (h *ConnectionHandler) HandleConnections(w http.ResponseWriter, r *http.Req
 
 			err := myConn.WriteJSON(msg)
 			if err != nil {
-				fmt.Println(err)
+				fmt.Println("error receiving message: ", err)
 			}
 		}
 	}()
@@ -125,7 +125,7 @@ func (h *ConnectionHandler) HandleConnections(w http.ResponseWriter, r *http.Req
 		var msg string
 		err := conn.ReadJSON(&msg)
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("error sending message: ", err)
 			return
 		}
 

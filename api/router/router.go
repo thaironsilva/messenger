@@ -18,7 +18,7 @@ func New(db *sql.DB) *http.ServeMux {
 	userRepository := user.NewRepository(db)
 
 	connHandler := connectionManager.NewConnectionHandler(messageRepository, userRepository, cognito)
-	router.HandleFunc("api/v0/chat/{username}", connHandler.HandleConnections)
+	router.HandleFunc("/api/v0/chat/{username}", connHandler.HandleConnections)
 
 	messageHandler := message.NewHandler(messageRepository, userRepository, cognito)
 	router.HandleFunc("GET /api/v0/messages/{username}", message.GetMessages(messageHandler))
