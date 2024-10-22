@@ -11,4 +11,4 @@ RUN go build ./cmd/app
 
 EXPOSE 8080
 
-CMD ["./migrate", "./app"]
+CMD ./migrate && ./app
