@@ -1,4 +1,4 @@
-name: Holidex Website CI
+name: Go Messenger
 
 on: [push]
 
