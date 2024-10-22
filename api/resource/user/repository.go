@@ -39,7 +39,7 @@ func (r *Repository) GetByEmail(email string) (User, error) {
 
 func (r *Repository) GetByString(name string) ([]User, error) {
 	name = "%" + strings.ToLower(name) + "%"
-	rows, err := r.db.Query("SELECT * FROM users WHERE username LIKE $1 OR email LIKE $1", name)
+	rows, err := r.db.Query("SELECT * FROM users WHERE username LIKE $1 OR email LIKE $1 LIMIT 20", name)
 
 	if err != nil {
 		return nil, err
