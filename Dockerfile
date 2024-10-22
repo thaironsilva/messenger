@@ -6,8 +6,9 @@ COPY . .
 
 RUN go get -d -v ./...
 
+RUN go build ./cmd/migrate
 RUN go build ./cmd/app
 
 EXPOSE 8080
 
-CMD ["./app"]
+CMD ["./migrate", "./app"]
