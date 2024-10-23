@@ -18,5 +18,7 @@ jobs:
 
       - name: Build docker image
         run: docker build -t go-messenger .
+      - name: Tagging image
+        run: docker tag go-messenger:latest thaironsilva/go-messenger:latest
       - name: Push to dockerhub
         run: docker push thaironsilva/go-messenger:latest
