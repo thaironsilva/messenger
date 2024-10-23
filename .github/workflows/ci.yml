@@ -1,8 +1,12 @@
-name: Go Messenger docker image
+name: CI pipeline
 
 on:
   push:
     branches: [main]
+  worflow_run:
+    workflows: ["Tests pipeline"]
+    types:
+      - completed
 
 jobs:
   build:
