@@ -3,10 +3,6 @@ name: CI pipeline
 on:
   push:
     branches: [main]
-  workflow_run:
-    workflows: ["Tests pipeline"]
-    types:
-      - completed
 
 jobs:
   build:
