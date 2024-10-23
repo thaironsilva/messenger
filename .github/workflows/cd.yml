@@ -23,11 +23,13 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_SECRET_ACCESS_KEY}}
         run: >-
           sudo docker run -d -p 8080:8080 \
-            -e DATABASE_URL \
-            -e COGNITO_CLIENT_ID \
-            -e COGNITO_USER_POOL_ID \
-            -e AWS_ACCESS_KEY_ID \
-            -e AWS_SECRET_ACCESS_KEY \
+            -e DATABASE_URL=$DATABASE_URL \
+            -e COGNITO_CLIENT_ID=$COGNITO_CLIENT_ID \
+            -e COGNITO_USER_POOL_ID=$COGNITO_USER_POOL_ID \
+            -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+            -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
             -e AWS_DEFAULT_REGION='us-west-2' \
             --name go-messenger-container thaironsilva/go-messenger
+      - name: Prune docker images
+        run: docker image prune
           
