@@ -9,8 +9,6 @@ services:
       DATABASE_URL: "host=host.docker.internal user=postgres password=postgres dbname=postgres sslmode=disable"
       COGNITO_CLIENT_ID: "10kissda9bdinuq2ss5msrhlce"
       COGNITO_USER_POOL_ID: "us-east-2_dWmKItNTN"
-      AWS_ACCESS_KEY_ID: AKIA53SEUVWTOW3LKEVH
-      AWS_SECRET_ACCESS_KEY: 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
       AWS_DEFAULT_REGION: us-west-2
     ports:
       - "8080:8080"
@@ -28,5 +26,5 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
-volumes:  
+volumes:
   pgdata: {}
