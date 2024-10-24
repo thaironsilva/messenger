@@ -16,7 +16,8 @@ jobs:
         run: sudo docker rm -f go-messenger-container || true
       - name: Run docker container
         run: >-
-          sudo docker run -d --name go-messenger-container \            -e DATABASE_URL="${{secrets.DATABASE_URL}}"
+          sudo docker run -d --name go-messenger-container \
+            -e DATABASE_URL="${{secrets.DATABASE_URL}}" \
             -e COGNITO_CLIENT_ID=${{secrets.COGNITO_CLIENT_ID}} \
             -e COGNITO_USER_POOL_ID=${{secrets.COGNITO_USER_POOL_ID}} \
             -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
